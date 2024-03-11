@@ -33,27 +33,27 @@ class Pieces(QGraphicsPixmapItem):  # Update: Inherit from QGraphicsPixmapItem
 
 class Pawn(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/pawn_{self.color}.png")
+        return QPixmap(f"pieces/pawn-{self.color[0]}.svg")
 
 class Rook(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/rook_{self.color}.png")
+        return QPixmap(f"pieces/rook-{self.color[0]}.svg")
 
 class Knight(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/knight_{self.color}.png")
+        return QPixmap(f"pieces/knight-{self.color[0]}.svg")
 
 class Bishop(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/bishop_{self.color}.png")
+        return QPixmap(f"pieces/bishop-{self.color[0]}.svg")
 
 class Queen(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/queen_{self.color}.png")
+        return QPixmap(f"pieces/queen-{self.color[0]}.svg")
 
 class King(Pieces):
     def set_pixmap(self):
-        return QPixmap(f"pieces/king_{self.color}.png")
+        return QPixmap(f"pieces/king-{self.color[0]}.svg")
 
 
 class Chess(QGraphicsScene):
