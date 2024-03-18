@@ -10,6 +10,7 @@ class MapSquare(QGraphicsItem):
         super().__init__()
         self.rect = QRectF(x, y, size, size)
         self.color = color
+        self.old_color = None
 
     def boundingRect(self):
         return self.rect
@@ -18,11 +19,12 @@ class MapSquare(QGraphicsItem):
         fill_color = QColor(*self.color)
         painter.fillRect(self.rect, fill_color)
 
+
 class Circle(QGraphicsItem):
     def __init__(self, x, y, size):
         super().__init__()
-        self.rect = QRectF(x , y, size, size)
-        self.color = QColor(255,0,0,255)
+        self.rect = QRectF(x, y, size, size)
+        self.color = QColor(255, 0, 0, 255)
 
     def boundingRect(self):
         return self.rect
@@ -30,10 +32,10 @@ class Circle(QGraphicsItem):
     def paint(self, painter: QPainter, option, widget=None):
         fill_color = self.color
         painter.setBrush(fill_color)
-        #center the circle
-
+        # center the circle
 
         painter.drawEllipse(self.rect)
+
 
 class Pieces(QGraphicsItem):
     def __init__(self, x, y, size, color):
@@ -43,8 +45,13 @@ class Pieces(QGraphicsItem):
         self.image_path = self.set_pixmap()  # Set the image path based on color
         self.pixmap = QPixmap(self.image_path)
         self.setPos(x, y)
+        self.moves = self.moves()
+        self.number_of_moves = 0
 
     def set_pixmap(self):
+        pass
+
+    def moves(self):
         pass
 
     def boundingRect(self):
@@ -58,30 +65,73 @@ class Pawn(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/pawn-{self.color[0]}.svg")
 
+    def moves(self):
+        if self.color == "white":
+            return [(-1, 0), (-2, 0)]
+        else:
+            return [(1, 0), (2, 0)]
+
+    def after_first_move(self):
+        if self.color == "white":
+            return [(-1, 0)]
+        else:
+            return [(1, 0)]
+
+    def try_take(self):
+        if self.color == "white":
+            return [(-1, -1), (-1, 1)]
+        else:
+            return [(1, -1), (1, 1)]
+
 
 class Rook(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/rook-{self.color[0]}.svg")
+
+    def moves(self):
+        return [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7),
+                (0, -1), (0, -2), (0, -3), (0, -4), (0, -5), (0, -6), (0, -7),
+                (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0),
+                (-1, 0), (-2, 0), (-3, 0), (-4, 0), (-5, 0), (-6, 0), (-7, 0)]
 
 
 class Knight(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/knight-{self.color[0]}.svg")
 
+    def moves(self):
+        return [(2, 1), (2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2), (-2, 1), (-2, -1)]
+
 
 class Bishop(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/bishop-{self.color[0]}.svg")
+
+    def moves(self):
+        return [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7),
+                (1, -1), (2, -2), (3, -3), (4, -4), (5, -5), (6, -6), (7, -7),
+                (-1, 1), (-2, 2), (-3, 3), (-4, 4), (-5, 5), (-6, 6), (-7, 7),
+                (-1, -1), (-2, -2), (-3, -3), (-4, -4), (-5, -5), (-6, -6), (-7, -7)]
 
 
 class Queen(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/queen-{self.color[0]}.svg")
 
+    def moves(self):
+        return [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, -1), (0, -2), (0, -3), (0, -4), (0, -5),
+                (0, -6), (0, -7), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (-1, 0), (-2, 0), (-3, 0),
+                (-4, 0), (-5, 0), (-6, 0), (-7, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (1, -1),
+                (2, -2), (3, -3), (4, -4), (5, -5), (6, -6), (7, -7), (-1, 1), (-2, 2), (-3, 3), (-4, 4), (-5, 5),
+                (-6, 6), (-7, 7), (-1, -1), (-2, -2), (-3, -3), (-4, -4), (-5, -5), (-6, -6), (-7, -7)]
+
 
 class King(Pieces):
     def set_pixmap(self):
         return QPixmap(f"pieces/king-{self.color[0]}.svg")
+
+    def moves(self):
+        return [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 
 
 class Chess(QGraphicsScene):
@@ -170,6 +220,8 @@ class Chess(QGraphicsScene):
     def mousePressEvent(self, event):
         items = self.items(event.scenePos())
 
+        self.reset_color()
+
         # Check if any piece is clicked
         for item in items:
             if isinstance(item, Pieces):
@@ -179,6 +231,12 @@ class Chess(QGraphicsScene):
 
         super().mousePressEvent(event)
         if self.selected_piece is not None:
+            x = self.initial_position.x()
+            y = self.initial_position.y()
+            try:
+                self.find_legal_moves(x, y)
+            except:
+                pass
             self.blinkTimer.start(500)
 
     def mouseMoveEvent(self, event):
@@ -192,16 +250,18 @@ class Chess(QGraphicsScene):
             # Check if the piece is released on a valid square
             square = event.scenePos()
 
-            print(square.x(), square.y())
-            print(self.calculate_position(square.x(), square.y()))
-
+            # print(square.x(), square.y())
+            # print(self.calculate_position(square.x(), square.y()))
             try:
                 new_position = QPointF(*self.calculate_position(square.x(), square.y()))
             except:
                 new_position = None
 
             if new_position is not None:
-                self.selected_piece.setPos(new_position)
+                if self.squares[int(new_position.x() / self.square_size + new_position.y() / self.square_size * 8)].color == (255, 0, 0, 255):
+                    self.selected_piece.setPos(new_position)
+                else:
+                    self.selected_piece.setPos(self.initial_position)
             else:
                 self.selected_piece.setPos(self.initial_position)
 
@@ -211,17 +271,185 @@ class Chess(QGraphicsScene):
 
             self.take()
 
-            if self.selected_piece.pos() == self.initial_position:
-                print("Invalid move")
-                x = self.initial_position.x()
-                y = self.initial_position.y()
-                circle_size = 20
-                #self.addItem(Circle(x + (self.square_size - circle_size) / 2, y + (self.square_size - circle_size) / 2, 20))
+            if self.selected_piece.pos() != self.initial_position:
+                self.selected_piece.number_of_moves += 1
+                self.reset_color()
+                if self.selected_piece.number_of_moves >= 1:
+                    if self.selected_piece.__class__.__name__ == "Pawn":
+                        self.selected_piece.moves = self.selected_piece.after_first_move()
+                        '''new = Queen(self.selected_piece.pos().x(), self.selected_piece.pos().y(), self.square_size, self.selected_piece.color)
+                        self.removeItem(self.selected_piece)
+                        self.selected_piece = new
+                        self.addItem(new)'''
 
-            self.selected_piece = None
-            self.initial_position = QPointF()
 
+
+        self.selected_piece = None
+        self.initial_position = QPointF()
         super().mouseReleaseEvent(event)
+
+    def find_legal_moves(self, x, y):
+        cord_x, cord_y = self.calculate_position(x + 1, y + 1)
+        cord_x, cord_y = cord_x / self.square_size, cord_y / self.square_size
+        legal_moves = self.calculate_legal_moves((cord_y, cord_x), self.selected_piece)
+
+        for move in legal_moves:
+            self.highlight_square(move[1], move[0])  # x, y -> y, x because of the way the board is created
+
+    def highlight_square(self, x, y):
+        x = int(x)
+        y = int(y)
+        self.squares[x + y * 8].old_color = self.squares[x + y * 8].color
+        self.squares[x + y * 8].color = (255, 0, 0, 255)
+        self.squares[x + y * 8].update()
+
+    def to_chess_notation(self, x, y):
+        dic = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g", 7: "h"}
+        row = 8 - x
+        col = dic[y]
+        return f"{col}{row}"
+
+    def calculate_legal_moves(self, pos, piece):
+        # print(f"Legal moves for {self.to_chess_notation(pos[0], pos[1])}")
+        legal_moves = []
+        for move in piece.moves:
+            x = pos[0] + move[0]
+            y = pos[1] + move[1]
+            if 0 <= x <= 7 and 0 <= y <= 7:
+                # print(self.to_chess_notation(x, y))
+                legal_moves.append((x, y))
+        final_legal_moves = self.find_farthest_moves(legal_moves, piece)
+        return final_legal_moves
+
+    def find_farthest_moves(self, legal_moves, piece):
+        directions = [[], [], [], [], [], [], [], []]
+
+
+        if piece.__class__.__name__ == "Knight":
+            directions = legal_moves
+        else:
+            piece_x, piece_y = piece.pos().x() / self.square_size, piece.pos().y() / self.square_size
+            for move in legal_moves:
+                y, x = move
+                new_x = piece_x - x
+                new_y = piece_y - y
+
+                # Check each direction for farthest possible move and first enemy piece encountered
+                if new_x == 0:
+                    if new_y > 0:
+                        for i in range(1, int(new_y) + 1):
+                            if (piece_y - i, piece_x) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[0].append((piece_y - i, piece_x))
+                            else:
+                                directions[0].append((piece_y - i, piece_x))
+                                break
+                    else:
+                        for i in range(1, abs(int(new_y)) + 1):
+                            if (piece_y + i, piece_x) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[1].append((piece_y + i, piece_x))
+                            else:
+                                directions[1].append((piece_y + i, piece_x))
+                                break
+                elif new_y == 0:
+                    if new_x > 0:
+                        for i in range(1, int(new_x) + 1):
+                            if (piece_y, piece_x - i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[2].append((piece_y, piece_x - i))
+                            else:
+                                directions[2].append((piece_y, piece_x - i))
+                                break
+                    else:
+                        for i in range(1, abs(int(new_x)) + 1):
+                            if (piece_y, piece_x + i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[3].append((piece_y, piece_x + i))
+                            else:
+                                directions[3].append((piece_y, piece_x + i))
+                                break
+                elif new_x == new_y:
+                    if new_x > 0:
+                        for i in range(1, int(new_x) + 1):
+                            if (piece_y - i, piece_x - i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[4].append((piece_y - i, piece_x - i))
+                            else:
+                                directions[4].append((piece_y - i, piece_x - i))
+                                break
+                    else:
+                        for i in range(1, abs(int(new_x)) + 1):
+                            if (piece_y + i, piece_x + i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[5].append((piece_y + i, piece_x + i))
+                            else:
+                                directions[5].append((piece_y + i, piece_x + i))
+                                break
+                elif new_x == -new_y:
+                    if new_x > 0:
+                        for i in range(1, int(new_x) + 1):
+                            if (piece_y + i, piece_x - i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[6].append((piece_y + i, piece_x - i))
+                            else:
+                                directions[6].append((piece_y + i, piece_x - i))
+                                break
+                    else:
+                        for i in range(1, abs(int(new_x)) + 1):
+                            if (piece_y - i, piece_x + i) not in [
+                                (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                self.white_pieces + self.black_pieces]:
+                                directions[7].append((piece_y - i, piece_x + i))
+                            else:
+                                directions[7].append((piece_y - i, piece_x + i))
+                                break
+            for i in range(len(directions)):
+                directions[i] = list(set(directions[i]))
+
+            directions = [item for sublist in directions for item in sublist]
+
+        moves = []
+        # delete moves on the same color
+        for move in directions:
+            dlt = False
+            for p in self.white_pieces + self.black_pieces:
+                if move in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                    if piece.color == p.color:
+                        dlt = True
+                    if piece.color != p.color and piece.__class__.__name__ == "Pawn":
+                        dlt = True
+            if not dlt:
+                moves.append(move)
+
+        #check if pawn can take
+
+        if piece.__class__.__name__ == "Pawn":
+            for move in piece.try_take():
+                mx = move[0] + piece.pos().y() / self.square_size
+                my = move[1] + piece.pos().x() / self.square_size
+
+                for p in self.white_pieces + self.black_pieces:
+                    if (mx,my) in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                        if piece.color != p.color:
+                            moves.append((mx,my))
+
+
+        return moves
+
+    def reset_color(self):
+        for square in self.squares:
+            if square.old_color is not None:
+                square.color = square.old_color
+                square.old_color = None
+                square.update()
 
     def calculate_position(self, x, y):
         for square in self.squares:
@@ -248,13 +476,6 @@ class Chess(QGraphicsScene):
                             self.white_pieces.remove(piece)
                     if self.selected_piece.color == piece.color:
                         self.selected_piece.setPos(self.initial_position)
-
-
-
-
-
-
-
 
 
 def main():
