@@ -1,8 +1,23 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QGraphicsView, QGraphicsScene,
-                             QGraphicsItem, QGraphicsTextItem)
-from PyQt6.QtCore import (QRectF, QTimer, QPointF)
+                             QGraphicsItem, QGraphicsTextItem, QMainWindow, QLabel)
+from PyQt6.QtCore import (QRectF, QTimer, QPointF, QObject, pyqtSignal, QThread)
 from PyQt6.QtGui import (QPainter, QColor, QFont, QPixmap)
+
+
+class Logger(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("Ruch")
+        self.setGeometry(100, 100, 300, 100)
+
+        self.label = QLabel(self)
+        self.label.setGeometry(10, 10, 280, 80)
+        self.label.setText("Ruch: ")
+
+    def update_text(self, text):
+        self.label.setText(text)
 
 
 class MapSquare(QGraphicsItem):
@@ -11,6 +26,7 @@ class MapSquare(QGraphicsItem):
         self.rect = QRectF(x, y, size, size)
         self.color = color
         self.old_color = None
+        self.is_legal = False
 
     def boundingRect(self):
         return self.rect
@@ -19,22 +35,6 @@ class MapSquare(QGraphicsItem):
         fill_color = QColor(*self.color)
         painter.fillRect(self.rect, fill_color)
 
-
-class Circle(QGraphicsItem):
-    def __init__(self, x, y, size):
-        super().__init__()
-        self.rect = QRectF(x, y, size, size)
-        self.color = QColor(255, 0, 0, 255)
-
-    def boundingRect(self):
-        return self.rect
-
-    def paint(self, painter: QPainter, option, widget=None):
-        fill_color = self.color
-        painter.setBrush(fill_color)
-        # center the circle
-
-        painter.drawEllipse(self.rect)
 
 
 class Pieces(QGraphicsItem):
@@ -143,11 +143,15 @@ class Chess(QGraphicsScene):
         self.squares = []
         self.white_pieces = []
         self.black_pieces = []
+        self.highlight_color = (255, 30, 0, 255)
+        self.which_turn = "white"
         self.selected_piece = None
         self.initial_position = QPointF()
+        self.logger = Logger()
         self.initialize_map()
         self.blinkTimer = QTimer()
         self.blinkTimer.timeout.connect(self.update_blink)
+
 
     def initialize_map(self):
         for row in range(self.h_square):
@@ -197,6 +201,9 @@ class Chess(QGraphicsScene):
             self.addItem(piece)
         for piece in self.black_pieces:
             self.addItem(piece)
+
+        self.logger.show()
+
 
     def add_labels(self):
         font = QFont("Arial", 16, QFont.Weight.Bold)
@@ -258,7 +265,7 @@ class Chess(QGraphicsScene):
                 new_position = None
 
             if new_position is not None:
-                if self.squares[int(new_position.x() / self.square_size + new_position.y() / self.square_size * 8)].color == (255, 0, 0, 255):
+                if self.squares[int(new_position.x() / self.square_size + new_position.y() / self.square_size * 8)].is_legal:
                     self.selected_piece.setPos(new_position)
                 else:
                     self.selected_piece.setPos(self.initial_position)
@@ -272,15 +279,23 @@ class Chess(QGraphicsScene):
             self.take()
 
             if self.selected_piece.pos() != self.initial_position:
+                self.logger.update_text(f"Ruch: {self.which_turn}")
+
                 self.selected_piece.number_of_moves += 1
+                if self.which_turn == "white":
+                    self.which_turn = "black"
+                else:
+                    self.which_turn = "white"
                 self.reset_color()
-                if self.selected_piece.number_of_moves >= 1:
-                    if self.selected_piece.__class__.__name__ == "Pawn":
+
+                if self.selected_piece.__class__.__name__ == "Pawn":
+                    if self.selected_piece.number_of_moves == 1:
                         self.selected_piece.moves = self.selected_piece.after_first_move()
-                        '''new = Queen(self.selected_piece.pos().x(), self.selected_piece.pos().y(), self.square_size, self.selected_piece.color)
-                        self.removeItem(self.selected_piece)
-                        self.selected_piece = new
-                        self.addItem(new)'''
+                    self.pawn_promotion()
+
+                if self.selected_piece.__class__.__name__ == "King":
+                    self.castling()
+
 
 
 
@@ -300,7 +315,8 @@ class Chess(QGraphicsScene):
         x = int(x)
         y = int(y)
         self.squares[x + y * 8].old_color = self.squares[x + y * 8].color
-        self.squares[x + y * 8].color = (255, 0, 0, 255)
+        self.squares[x + y * 8].color = self.highlight_color
+        self.squares[x + y * 8].is_legal = True
         self.squares[x + y * 8].update()
 
     def to_chess_notation(self, x, y):
@@ -311,14 +327,16 @@ class Chess(QGraphicsScene):
 
     def calculate_legal_moves(self, pos, piece):
         # print(f"Legal moves for {self.to_chess_notation(pos[0], pos[1])}")
-        legal_moves = []
+        legal_moves, final_legal_moves = [], []
         for move in piece.moves:
             x = pos[0] + move[0]
             y = pos[1] + move[1]
             if 0 <= x <= 7 and 0 <= y <= 7:
                 # print(self.to_chess_notation(x, y))
                 legal_moves.append((x, y))
+        #if piece.color == self.which_turn:
         final_legal_moves = self.find_farthest_moves(legal_moves, piece)
+
         return final_legal_moves
 
     def find_farthest_moves(self, legal_moves, piece):
@@ -441,15 +459,119 @@ class Chess(QGraphicsScene):
                         if piece.color != p.color:
                             moves.append((mx,my))
 
+        # check for castling
+        if piece.__class__.__name__ == "King":
+            moves = self.check_castling(piece,moves)
+
+
 
         return moves
+
+    def check_castling(self,piece,moves):
+        if piece.number_of_moves == 0:
+            if piece.color == "white":
+                # check if 7,5 and 7,6 are empty
+                if (7, 5) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                  self.white_pieces + self.black_pieces]:
+                    if (7, 6) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
+                                      in self.white_pieces + self.black_pieces]:
+                        # check if 7,7 is rook
+                        for p in self.white_pieces:
+                            if (7, 7) in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                                if p.__class__.__name__ == "Rook":
+                                    if p.number_of_moves == 0:
+                                        moves.append((7, 6))
+                if (7, 3) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                  self.white_pieces + self.black_pieces]:
+                    if (7, 2) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
+                                      in self.white_pieces + self.black_pieces]:
+                        if (7, 1) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for
+                                          p in self.white_pieces + self.black_pieces]:
+                            for p in self.white_pieces:
+                                if (7, 0) in [
+                                    (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                                    if p.__class__.__name__ == "Rook":
+                                        if p.number_of_moves == 0:
+                                            moves.append((7, 2))
+            else:
+                # check if 0,5 and 0,6 are empty
+                if (0, 5) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                  self.white_pieces + self.black_pieces]:
+                    if (0, 6) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
+                                      in self.white_pieces + self.black_pieces]:
+                        # check if 0,7 is rook
+                        for p in self.black_pieces:
+                            if (0, 7) in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                                if p.__class__.__name__ == "Rook":
+                                    if p.number_of_moves == 0:
+                                        moves.append((0, 6))
+                if (0, 3) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
+                                  self.white_pieces + self.black_pieces]:
+                    if (0, 2) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
+                                      in self.white_pieces + self.black_pieces]:
+                        if (0, 1) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for
+                                          p in self.white_pieces + self.black_pieces]:
+                            for p in self.black_pieces:
+                                if (0, 0) in [
+                                    (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                                    if p.__class__.__name__ == "Rook":
+                                        if p.number_of_moves == 0:
+                                            moves.append((0, 2))
+
+        return moves
+
+    def castling(self):
+        if self.selected_piece.number_of_moves == 1:
+            if self.selected_piece.color == "white":
+                if (self.selected_piece.pos().x() - self.initial_position.x()) == 2 * self.square_size:
+                    for p in self.white_pieces:
+                        if p.__class__.__name__ == "Rook" and p.pos().x() == 7 * self.square_size:
+                            p.setPos(5 * self.square_size, 7 * self.square_size)
+                            p.number_of_moves += 1
+                elif self.selected_piece.pos().x() - self.initial_position.x() == -2 * self.square_size:
+                    for p in self.white_pieces:
+                        if p.__class__.__name__ == "Rook" and p.pos().x() == 0:
+                            p.setPos(3 * self.square_size, 7 * self.square_size)
+                            p.number_of_moves += 1
+            else:
+                if (self.selected_piece.pos().x() - self.initial_position.x()) == 2 * self.square_size:
+                    for p in self.black_pieces:
+                        if p.__class__.__name__ == "Rook" and p.pos().x() == 7 * self.square_size:
+                            p.setPos(5 * self.square_size, 0)
+                            p.number_of_moves += 1
+                elif self.selected_piece.pos().x() - self.initial_position.x() == -2 * self.square_size:
+                    for p in self.black_pieces:
+                        if p.__class__.__name__ == "Rook" and p.pos().x() == 0:
+                            p.setPos(3 * self.square_size, 0)
+                            p.number_of_moves += 1
 
     def reset_color(self):
         for square in self.squares:
             if square.old_color is not None:
                 square.color = square.old_color
                 square.old_color = None
+                square.is_legal = False
                 square.update()
+
+    def pawn_promotion(self):
+        if self.selected_piece.color == "white":
+            if self.selected_piece.pos().y() == 0:
+                new = Queen(self.selected_piece.pos().x(), self.selected_piece.pos().y(), self.square_size,
+                            self.selected_piece.color)
+                self.removeItem(self.selected_piece)
+                self.white_pieces.remove(self.selected_piece)
+                self.white_pieces.append(new)
+                self.selected_piece = new
+                self.addItem(new)
+        else:
+            if self.selected_piece.pos().y() == 7 * self.square_size:
+                new = Queen(self.selected_piece.pos().x(), self.selected_piece.pos().y(), self.square_size,
+                            self.selected_piece.color)
+                self.removeItem(self.selected_piece)
+                self.black_pieces.remove(self.selected_piece)
+                self.black_pieces.append(new)
+                self.selected_piece = new
+                self.addItem(new)
 
     def calculate_position(self, x, y):
         for square in self.squares:
@@ -486,7 +608,6 @@ def main():
     view.setGeometry(300, 30, 710, 710)
     view.show()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
