@@ -1,24 +1,34 @@
 import sys
 from PyQt6.QtWidgets import (QApplication, QGraphicsView, QGraphicsScene,
-                             QGraphicsItem, QGraphicsTextItem, QMainWindow, QLabel)
-from PyQt6.QtCore import (QRectF, QTimer, QPointF, QObject, pyqtSignal, QThread)
+                             QGraphicsItem, QGraphicsTextItem, QMainWindow, QLabel, QVBoxLayout, QWidget, QScrollArea)
+from PyQt6.QtCore import (QRectF, QTimer, QPointF, QObject, pyqtSignal, QThread, Qt)
 from PyQt6.QtGui import (QPainter, QColor, QFont, QPixmap)
-
+import threading
+import queue
 
 class Logger(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Ruch")
-        self.setGeometry(100, 100, 300, 100)
+        self.setWindowTitle("Ruchy")
+        self.setGeometry(50, 50, 200, 300)
 
-        self.label = QLabel(self)
-        self.label.setGeometry(10, 10, 280, 80)
-        self.label.setText("Ruch: ")
+        scroll_area = QScrollArea()
+        self.setCentralWidget(scroll_area)
+
+        # Tworzenie etykiety
+        self.label = QLabel()
+        self.label.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(self.label)
+
+        self.text = ""
+
 
     def update_text(self, text):
-        self.label.setText(text)
-
+        self.text = self.text + text + "\n"
+        self.label.setText(self.text)
 
 class MapSquare(QGraphicsItem):
     def __init__(self, x, y, size, color):
@@ -152,6 +162,10 @@ class Chess(QGraphicsScene):
         self.blinkTimer = QTimer()
         self.blinkTimer.timeout.connect(self.update_blink)
 
+        self.log_queue = queue.Queue()
+        self.log_worker = threading.Thread(target=self.process_log_updates)
+        self.log_worker.daemon = True
+        self.log_worker.start()
 
     def initialize_map(self):
         for row in range(self.h_square):
@@ -279,7 +293,8 @@ class Chess(QGraphicsScene):
             self.take()
 
             if self.selected_piece.pos() != self.initial_position:
-                self.logger.update_text(f"Ruch: {self.which_turn}")
+
+                self.update_logger()
 
                 self.selected_piece.number_of_moves += 1
                 if self.which_turn == "white":
@@ -321,7 +336,7 @@ class Chess(QGraphicsScene):
 
     def to_chess_notation(self, x, y):
         dic = {0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g", 7: "h"}
-        row = 8 - x
+        row = int(8 - x)
         col = dic[y]
         return f"{col}{row}"
 
@@ -334,8 +349,8 @@ class Chess(QGraphicsScene):
             if 0 <= x <= 7 and 0 <= y <= 7:
                 # print(self.to_chess_notation(x, y))
                 legal_moves.append((x, y))
-        #if piece.color == self.which_turn:
-        final_legal_moves = self.find_farthest_moves(legal_moves, piece)
+        if piece.color == self.which_turn:
+            final_legal_moves = self.find_farthest_moves(legal_moves, piece)
 
         return final_legal_moves
 
@@ -552,6 +567,20 @@ class Chess(QGraphicsScene):
                 square.old_color = None
                 square.is_legal = False
                 square.update()
+
+    def update_logger(self):
+        inix = self.initial_position.x() / self.square_size
+        iniy = self.initial_position.y() / self.square_size
+        x = self.selected_piece.pos().x() / self.square_size
+        y = self.selected_piece.pos().y() / self.square_size
+        text = f'{self.to_chess_notation(iniy,inix)}{self.to_chess_notation(y, x)}'
+        self.log_queue.put(f"Ruch: {text}")
+
+    def process_log_updates(self):
+        while True:
+            text = self.log_queue.get()
+            self.logger.update_text(text)
+            self.log_queue.task_done()
 
     def pawn_promotion(self):
         if self.selected_piece.color == "white":
