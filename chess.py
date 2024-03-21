@@ -48,15 +48,15 @@ class MapSquare(QGraphicsItem):
 
 
 class Pieces(QGraphicsItem):
-    def __init__(self, x, y, size, color):
+    def __init__(self, x, y, size, color, number_of_moves=0):
         super().__init__()
         self.color = color
         self.size = size
         self.image_path = self.set_pixmap()  # Set the image path based on color
         self.pixmap = QPixmap(self.image_path)
         self.setPos(x, y)
+        self.number_of_moves = number_of_moves
         self.moves = self.moves()
-        self.number_of_moves = 0
 
     def set_pixmap(self):
         pass
@@ -76,10 +76,13 @@ class Pawn(Pieces):
         return QPixmap(f"pieces/pawn-{self.color[0]}.svg")
 
     def moves(self):
-        if self.color == "white":
-            return [(-1, 0), (-2, 0)]
+        if self.number_of_moves == 0:
+            if self.color == "white":
+                return [(-1, 0), (-2, 0)]
+            else:
+                return [(1, 0), (2, 0)]
         else:
-            return [(1, 0), (2, 0)]
+            return self.after_first_move()
 
     def after_first_move(self):
         if self.color == "white":
@@ -159,6 +162,7 @@ class Chess(QGraphicsScene):
         self.initial_position = QPointF()
         self.logger = Logger()
         self.initialize_map()
+        self.history = []
         self.blinkTimer = QTimer()
         self.blinkTimer.timeout.connect(self.update_blink)
 
@@ -254,6 +258,7 @@ class Chess(QGraphicsScene):
         if self.selected_piece is not None:
             x = self.initial_position.x()
             y = self.initial_position.y()
+            print(self.selected_piece.number_of_moves)
             try:
                 self.find_legal_moves(x, y)
             except:
@@ -304,14 +309,20 @@ class Chess(QGraphicsScene):
                 self.reset_color()
 
                 if self.selected_piece.__class__.__name__ == "Pawn":
-                    if self.selected_piece.number_of_moves == 1:
+                    if self.selected_piece.number_of_moves >= 1:
                         self.selected_piece.moves = self.selected_piece.after_first_move()
                     self.pawn_promotion()
+                    self.check_en_passant()
 
                 if self.selected_piece.__class__.__name__ == "King":
                     self.castling()
 
 
+                self.record_board_state()
+
+                if self.check_check():
+                    self.log_queue.put("Szach!")
+                    self.undo_move()
 
 
         self.selected_piece = None
@@ -474,6 +485,26 @@ class Chess(QGraphicsScene):
                         if piece.color != p.color:
                             moves.append((mx,my))
 
+            # en passant
+            if piece.color == "white":
+                if piece.pos().y() == 3 * self.square_size:
+                    for p in self.black_pieces:
+                        if p.__class__.__name__ == "Pawn":
+                            if p.number_of_moves == 1 and p.pos().y() == piece.pos().y():
+                                if p.pos().x() - piece.pos().x() == self.square_size:
+                                    moves.append((2, p.pos().x() / self.square_size))
+                                elif piece.pos().x() - p.pos().x() == self.square_size:
+                                    moves.append((2, p.pos().x() / self.square_size))
+            else:
+                if piece.pos().y() == 4 * self.square_size:
+                    for p in self.white_pieces:
+                        if p.__class__.__name__ == "Pawn":
+                            if p.number_of_moves == 1 and p.pos().y() == piece.pos().y():
+                                if p.pos().x() - piece.pos().x() == self.square_size:
+                                    moves.append((5, p.pos().x() / self.square_size))
+                                elif piece.pos().x() - p.pos().x() == self.square_size:
+                                    moves.append((5, p.pos().x() / self.square_size))
+
         # check for castling
         if piece.__class__.__name__ == "King":
             moves = self.check_castling(piece,moves)
@@ -481,6 +512,25 @@ class Chess(QGraphicsScene):
 
 
         return moves
+
+    def check_check(self):
+        if self.which_turn == "white":
+            pieces = self.white_pieces
+        else:
+            pieces = self.black_pieces
+
+        for piece in pieces:
+            check_mate_moves = 0
+            moves = self.calculate_legal_moves((piece.pos().y() / self.square_size, piece.pos().x() / self.square_size), piece)
+            for move in moves:
+                for p in self.white_pieces + self.black_pieces:
+                    if move in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                        if p.__class__.__name__ == "King":
+                            check_mate_moves += 1
+                            return True
+            print(f"Check mate moves: {check_mate_moves}, legal moves: {len(moves)}")
+        return False
+
 
     def check_castling(self,piece,moves):
         if piece.number_of_moves == 0:
@@ -560,6 +610,25 @@ class Chess(QGraphicsScene):
                             p.setPos(3 * self.square_size, 0)
                             p.number_of_moves += 1
 
+    def check_en_passant(self):
+        if self.selected_piece.color == "white":
+            if self.selected_piece.pos().y() == 2 * self.square_size:
+                if abs(self.selected_piece.pos().x() - self.initial_position.x()) == self.square_size:
+                    for p in self.black_pieces:
+                        if p.__class__.__name__ == "Pawn" and p.number_of_moves == 1:
+                            if p.pos().x() == self.selected_piece.pos().x() and p.pos().y() == self.selected_piece.pos().y() + self.square_size:
+                                self.removeItem(p)
+                                self.black_pieces.remove(p)
+        else:
+            if self.selected_piece.pos().y() == 5 * self.square_size:
+                if abs(self.selected_piece.pos().x() - self.initial_position.x()) == self.square_size:
+                    for p in self.white_pieces:
+                        if p.__class__.__name__ == "Pawn" and p.number_of_moves == 1:
+                            if p.pos().x() == self.selected_piece.pos().x() and p.pos().y() == self.selected_piece.pos().y() - self.square_size:
+                                self.removeItem(p)
+                                self.white_pieces.remove(p)
+
+
     def reset_color(self):
         for square in self.squares:
             if square.old_color is not None:
@@ -627,6 +696,54 @@ class Chess(QGraphicsScene):
                             self.white_pieces.remove(piece)
                     if self.selected_piece.color == piece.color:
                         self.selected_piece.setPos(self.initial_position)
+
+    def record_board_state(self):
+        # Record the state of the board after the move
+        white_pieces_state = [(piece.__class__.__name__, piece.pos().x(), piece.pos().y(),piece.number_of_moves) for piece in
+                              self.white_pieces]
+        black_pieces_state = [(piece.__class__.__name__, piece.pos().x(), piece.pos().y(),piece.number_of_moves) for piece in
+                              self.black_pieces]
+        turn = self.which_turn
+        # Save the state to the history list
+        self.history.append((white_pieces_state, black_pieces_state, turn))
+
+    def undo_move(self):
+        if len(self.history) > 1:  # Ensure there's at least one move recorded
+            # Remove the current board state
+            self.history.pop()
+
+            # Retrieve the previous board state
+            prev_state = self.history[-1]
+            white_pieces_state, black_pieces_state, turn = prev_state
+
+            # Restore the board state
+            self.restore_board_state(white_pieces_state, black_pieces_state, turn)
+
+    def restore_board_state(self, white_pieces_state, black_pieces_state, turn):
+        # Remove all existing pieces from the scene
+        for piece in self.white_pieces + self.black_pieces:
+            self.removeItem(piece)
+
+        # Restore white pieces
+        self.white_pieces = []
+        for piece_info in white_pieces_state:
+            piece_class_name, x, y, nr = piece_info
+            piece_class = globals()[piece_class_name]
+            new_piece = piece_class(x, y, self.square_size, "white", nr)
+            self.white_pieces.append(new_piece)
+            self.addItem(new_piece)
+
+        # Restore black pieces
+        self.black_pieces = []
+        for piece_info in black_pieces_state:
+            piece_class_name, x, y, nr = piece_info
+            piece_class = globals()[piece_class_name]
+            new_piece = piece_class(x, y, self.square_size, "black", nr)
+            self.black_pieces.append(new_piece)
+            self.addItem(new_piece)
+
+        # Set the turn
+        self.which_turn = turn
 
 
 def main():
