@@ -283,51 +283,54 @@ class Chess(QGraphicsScene):
             except:
                 new_position = None
 
-            if new_position is not None:
-                if self.squares[int(new_position.x() / self.square_size + new_position.y() / self.square_size * 8)].is_legal:
-                    self.selected_piece.setPos(new_position)
-                else:
-                    self.selected_piece.setPos(self.initial_position)
-            else:
-                self.selected_piece.setPos(self.initial_position)
+            self.move(new_position)
 
-            self.blinkTimer.stop()
-            if self.selected_piece is not None:
-                self.selected_piece.setOpacity(1.0)
-
-            self.take()
-
-            if self.selected_piece.pos() != self.initial_position:
-
-                self.update_logger()
-
-                self.selected_piece.number_of_moves += 1
-                if self.which_turn == "white":
-                    self.which_turn = "black"
-                else:
-                    self.which_turn = "white"
-                self.reset_color()
-
-                if self.selected_piece.__class__.__name__ == "Pawn":
-                    if self.selected_piece.number_of_moves >= 1:
-                        self.selected_piece.moves = self.selected_piece.after_first_move()
-                    self.pawn_promotion()
-                    self.check_en_passant()
-
-                if self.selected_piece.__class__.__name__ == "King":
-                    self.castling()
-
-
-                self.record_board_state()
-
-                if self.check_check():
-                    self.log_queue.put("Szach!")
-                    self.undo_move()
+        if self.check_check(self.which_turn):
+            self.log_queue.put("Szach!")
+            self.undo_move()
 
 
         self.selected_piece = None
         self.initial_position = QPointF()
         super().mouseReleaseEvent(event)
+
+    def move(self, new_position):
+        if new_position is not None:
+            if self.squares[
+                int(new_position.x() / self.square_size + new_position.y() / self.square_size * 8)].is_legal:
+                self.selected_piece.setPos(new_position)
+            else:
+                self.selected_piece.setPos(self.initial_position)
+        else:
+            self.selected_piece.setPos(self.initial_position)
+
+        self.blinkTimer.stop()
+        if self.selected_piece is not None:
+            self.selected_piece.setOpacity(1.0)
+
+        self.take()
+
+        if self.selected_piece.pos() != self.initial_position:
+
+            self.update_logger()
+
+            self.selected_piece.number_of_moves += 1
+            if self.which_turn == "white":
+                self.which_turn = "black"
+            else:
+                self.which_turn = "white"
+            self.reset_color()
+
+            if self.selected_piece.__class__.__name__ == "Pawn":
+                if self.selected_piece.number_of_moves >= 1:
+                    self.selected_piece.moves = self.selected_piece.after_first_move()
+                self.pawn_promotion()
+                self.check_en_passant()
+
+            if self.selected_piece.__class__.__name__ == "King":
+                self.castling()
+
+            self.record_board_state()
 
     def find_legal_moves(self, x, y):
         cord_x, cord_y = self.calculate_position(x + 1, y + 1)
@@ -513,24 +516,23 @@ class Chess(QGraphicsScene):
 
         return moves
 
-    def check_check(self):
-        if self.which_turn == "white":
-            pieces = self.white_pieces
-        else:
-            pieces = self.black_pieces
+    def check_check(self,color):
+        pieces = self.white_pieces if color == "white" else self.black_pieces
 
         for piece in pieces:
-            check_mate_moves = 0
-            moves = self.calculate_legal_moves((piece.pos().y() / self.square_size, piece.pos().x() / self.square_size), piece)
-            for move in moves:
-                for p in self.white_pieces + self.black_pieces:
-                    if move in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
-                        if p.__class__.__name__ == "King":
-                            check_mate_moves += 1
-                            return True
-            print(f"Check mate moves: {check_mate_moves}, legal moves: {len(moves)}")
+            if self.can_capture_king(piece):
+                return True
+
         return False
 
+    def can_capture_king(self, piece):
+        moves = self.calculate_legal_moves((piece.pos().y() / self.square_size, piece.pos().x() / self.square_size),
+                                           piece)
+        for move in moves:
+            for p in self.white_pieces + self.black_pieces:
+                if move in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
+                    if p.__class__.__name__ == "King":
+                        return True
 
     def check_castling(self,piece,moves):
         if piece.number_of_moves == 0:
