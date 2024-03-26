@@ -157,12 +157,6 @@ class Chess(QGraphicsScene):
             if self.check_mate(self.which_turn):
                 self.log_queue.put("Szach mat!")
 
-        """if self.selected_piece is not None and self.selected_piece.pos() != self.initial_position:
-            self.update_logger()
-            if self.check_mate(self.which_turn):
-                self.log_queue.put("Szach mat!")"""
-
-
 
         self.updating = True
         self.selected_piece = None
@@ -408,12 +402,14 @@ class Chess(QGraphicsScene):
                 king = piece
                 break
 
-        self.try_block(king, attacking_piece)
 
         if self.try_escape(king,attacking_piece, attacking_pieces):
             return False
 
         if self.try_take_attacker(deffending_pieces, attacking_piece):
+            return False
+
+        if self.try_block(king, attacking_piece, deffending_pieces):
             return False
 
 
@@ -446,12 +442,37 @@ class Chess(QGraphicsScene):
             king.update()
         return False
 
-    def try_block(self, king, attacking_piece):
+    def try_block(self, king, attacking_piece, deffending_pieces):
         if attacking_piece.__class__.__name__ != "Knight" and attacking_piece.__class__.__name__ != "Pawn":
-            x = attacking_piece.pos().x() / self.square_size - king.pos().x() / self.square_size
-            y = attacking_piece.pos().y() / self.square_size - king.pos().y() / self.square_size
-            print(x, y)
+            squares = self.find_squares_between(king, attacking_piece)
+            for p in deffending_pieces:
+                if p.__class__.__name__ != "King":
+                    moves = self.calculate_legal_moves((p.pos().y() / self.square_size, p.pos().x() / self.square_size), p, p.color)
+                    for move in moves:
+                        if move in squares:
+                            return True
 
+    def find_squares_between(self, king, attacking_piece):
+        x = attacking_piece.pos().x() / self.square_size - king.pos().x() / self.square_size
+        y = attacking_piece.pos().y() / self.square_size - king.pos().y() / self.square_size
+        if x > 0:
+            dx = 1
+        elif x < 0:
+            dx = -1
+        else:
+            dx = 0
+        if y > 0:
+            dy = 1
+        elif y < 0:
+            dy = -1
+        else:
+            dy = 0
+        squares = []
+        nr = abs(x) if abs(x) > abs(y) else abs(y)
+        nr = int(nr)
+        for i in range(1, nr):
+            squares.append((king.pos().y() / self.square_size + i * dy, king.pos().x() / self.square_size + i * dx))
+        return squares
 
 
     def try_take_attacker(self, defending_pieces, attacker):
