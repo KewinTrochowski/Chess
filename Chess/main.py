@@ -1,11 +1,13 @@
 import sys
-from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsTextItem
+from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsTextItem, QInputDialog
 from PyQt6.QtCore import QTimer, QPointF
 from PyQt6.QtGui import QFont
 import threading
 import queue
 from pieces import *
 from logger import *
+from move_from_keyboard import MoveKeyboard
+from clock import Clock
 
 
 class Chess(QGraphicsScene):
@@ -14,14 +16,18 @@ class Chess(QGraphicsScene):
         self.square_size = 80
         self.w_square = 8
         self.h_square = 8
+        self.minutes = 60
         self.squares = []
         self.white_pieces = []
         self.black_pieces = []
         self.highlight_color = (255, 30, 0, 255)
         self.which_turn = "white"
         self.selected_piece = None
+        self.clock_black = Clock(720, 100, 100, 50)
+        self.clock_white = Clock(720, 600, 100, 50)
         self.initial_position = QPointF()
         self.logger = Logger()
+        self.move_from_keyboard = MoveKeyboard(self.square_size * 9,0,100,50)
         self.initialize_map()
         self.updating = True
         self.history = []
@@ -34,6 +40,9 @@ class Chess(QGraphicsScene):
         self.log_worker.start()
 
     def initialize_map(self):
+        minutes, ok_pressed = QInputDialog.getInt(None, "Czas gry", "Podaj czas gry w minutach", 60, 1, 120, 1)
+        if ok_pressed:
+            self.minutes = minutes
         for row in range(self.h_square):
             for col in range(self.w_square):
                 if (row + col) % 2 == 0:
@@ -83,6 +92,9 @@ class Chess(QGraphicsScene):
             self.addItem(piece)
 
         self.logger.show()
+        self.addWidget(self.move_from_keyboard)
+        self.addWidget(self.clock_black)
+        self.addWidget(self.clock_white)
 
     def add_labels(self):
         font = QFont("Arial", 16, QFont.Weight.Bold)
@@ -157,11 +169,75 @@ class Chess(QGraphicsScene):
             if self.check_mate(self.which_turn):
                 self.log_queue.put("Szach mat!")
 
+        if self.which_turn == "white":
+            self.clock_white.timer.start()
+            self.clock_black.timer.stop()
+        else:
+            self.clock_black.timer.start()
+            self.clock_white.timer.stop()
 
         self.updating = True
         self.selected_piece = None
         self.initial_position = QPointF()
         super().mouseReleaseEvent(event)
+
+    def final_move(self, new_position, piece=None):
+
+        if piece is None or piece.color != self.which_turn:
+            return
+        self.initial_position = piece.pos()
+        self.move(new_position, piece)
+
+
+        if self.check_check(self.which_turn):
+            self.undo_move()
+
+        if self.selected_piece is not None and self.selected_piece.pos() != self.initial_position:
+            self.update_logger()
+        if self.check_check(self.opposite_color(self.which_turn)):
+            self.log_queue.put("Szach!")
+            if self.check_mate(self.which_turn):
+                self.log_queue.put("Szach mat!")
+
+
+        if self.which_turn == "white":
+            self.clock_white.timer.start()
+            self.clock_black.timer.stop()
+        else:
+            self.clock_black.timer.start()
+            self.clock_white.timer.stop()
+
+        self.updating = True
+        self.selected_piece = None
+        self.initial_position = QPointF()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Up:
+            p1, p2 = self.move_from_keyboard.obsluga()
+            if p1 is not None and p2 is not None:
+                self.move_from_notation(p1, p2)
+        if event.text():
+            self.move_from_keyboard.text_edit.insertPlainText(event.text())
+
+
+    def move_from_notation(self, p1, p2):
+        x1, y1 = p1
+        x2, y2 = p2
+        self.selected_piece = self.find_piece(x1, y1)
+        try:
+            new_position = QPointF(y2 * self.square_size, x2 * self.square_size)
+        except:
+            new_position = None
+
+        if new_position is not None:
+            self.final_move(QPointF(y2 * self.square_size, x2 * self.square_size), self.selected_piece)
+
+    def find_piece(self, x, y):
+        for piece in self.white_pieces + self.black_pieces:
+            if (x,y) == (piece.pos().y() / self.square_size, piece.pos().x() / self.square_size):
+                return piece
+        return None
+
 
     def move(self, new_position, piece=None):
         if piece is None:
@@ -748,7 +824,7 @@ def main():
     scene = Chess()
     scene.setBackgroundBrush(QColor(64, 64, 64))
     view = QGraphicsView(scene)
-    view.setGeometry(300, 30, 710, 710)
+    view.setGeometry(250, 30, 1000, 710)
     view.show()
     sys.exit(app.exec())
 
