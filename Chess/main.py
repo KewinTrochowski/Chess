@@ -504,85 +504,80 @@ class Chess(QGraphicsScene):
                     if p.__class__.__name__ == "King":
                         return True
 
-    def check_white_castling(self, moves):
+    def check_white_castling(self, moves,piece):
         # check if 7,5 and 7,6 are empty
         if (7, 5) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
                           self.white_pieces + self.black_pieces]:
             if (7, 6) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
                               in self.white_pieces + self.black_pieces]:
-                #if not self.square_under_attack(((7, 5), (7, 6), (7, 4)), "white"):
                     # check if 7,7 is rook
                     for p in self.white_pieces:
                         if (7, 7) in [
                             (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
                             if p.__class__.__name__ == "Rook":
                                 if p.number_of_moves == 0:
-                                    moves.append((7, 6))
+                                    if not self.is_blocking_castling(piece,p):
+                                        moves.append((7, 6))
         if (7, 3) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
                           self.white_pieces + self.black_pieces]:
             if (7, 2) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
                               in self.white_pieces + self.black_pieces]:
                 if (7, 1) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for
                                   p in self.white_pieces + self.black_pieces]:
-                    #if not self.square_under_attack(((7, 4), (7, 3), (7, 2), (7, 1)), "white"):
                         for p in self.white_pieces:
                             if (7, 0) in [
                                 (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
                                 if p.__class__.__name__ == "Rook":
                                     if p.number_of_moves == 0:
-                                        moves.append((7, 2))
+                                        if not self.is_blocking_castling(piece, p):
+                                            moves.append((7, 2))
 
-    def check_black_castling(self, moves):
+    def check_black_castling(self, moves,piece):
         # check if 0,5 and 0,6 are empty
         if (0, 5) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
                           self.white_pieces + self.black_pieces]:
             if (0, 6) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
                               in self.white_pieces + self.black_pieces]:
-                #if not self.square_under_attack(((0, 5), (0, 6), (0, 4)), "black"):
                     # check if 0,7 is rook
                     for p in self.black_pieces:
                         if (0, 7) in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
                             if p.__class__.__name__ == "Rook":
                                 if p.number_of_moves == 0:
-                                    moves.append((0, 6))
+                                    if not self.is_blocking_castling(piece, p):
+                                        moves.append((0, 6))
         if (0, 3) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p in
                           self.white_pieces + self.black_pieces]:
             if (0, 2) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for p
                               in self.white_pieces + self.black_pieces]:
                 if (0, 1) not in [(p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size) for
                                   p in self.white_pieces + self.black_pieces]:
-                    #if not self.square_under_attack(((0, 4), (0, 3), (0, 2), (0, 1)), "black"):
                         for p in self.black_pieces:
                             if (0, 0) in [
                                 (p.scenePos().y() / self.square_size, p.scenePos().x() / self.square_size)]:
                                 if p.__class__.__name__ == "Rook":
                                     if p.number_of_moves == 0:
-                                        moves.append((0, 2))
+                                        if not self.is_blocking_castling(piece, p):
+                                            moves.append((0, 2))
+
+    def is_blocking_castling(self, king, rook):
+        squares = self.find_squares_between(king, rook)
+        pieces = self.white_pieces if king.color == "black" else self.black_pieces
+        for square in squares:
+            print(square)
+            for p in pieces:
+                if p.__class__.__name__ != "King":
+                    moves = self.calculate_legal_moves((p.pos().y() / self.square_size, p.pos().x() / self.square_size), p, p.color)
+                    if square in moves:
+                        return True
+        return False
 
     def check_castling(self, piece, moves):
         if piece.number_of_moves == 0:
             if piece.color == "white":
-                self.check_white_castling(moves)
+                self.check_white_castling(moves,piece)
             else:
-                self.check_black_castling(moves)
-
+                self.check_black_castling(moves,piece)
         return moves
-
-    def square_under_attack(self, squares, color):
-        """
-        Checks if a square is under attack by any of the opponent's pieces.
-        """
-        opponent_pieces = self.white_pieces if color == "black" else self.black_pieces
-        self.which_turn = "black" if color == "white" else "white"
-        for piece in opponent_pieces:
-            legal_moves = self.calculate_legal_moves(
-                (piece.pos().y() / self.square_size, piece.pos().x() / self.square_size), piece, color)
-            for square in squares:
-                if square in legal_moves:
-                    self.which_turn = "black" if self.which_turn == "white" else "white"
-                    return True
-        self.which_turn = "black" if self.which_turn == "white" else "white"
-        return False
 
     def castling(self):
         if self.selected_piece.number_of_moves == 1:
