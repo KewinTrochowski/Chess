@@ -23,16 +23,26 @@ class Chess(QGraphicsScene):
         self.highlight_color = (255, 30, 0, 255)
         self.which_turn = "white"
         self.selected_piece = None
-        self.clock_black = Clock(720, 100, 100, 50)
-        self.clock_white = Clock(720, 600, 100, 50)
+        self.seconds = 0
+        #step 0,5 min
+        time, ok_pressed = QInputDialog.getDouble(None, "Czas gry", "Podaj czas gry w minutach", 5, 0, 120, 1)
+        if ok_pressed:
+            time = str(time).split(".")
+            self.minutes = int(time[0])
+            self.seconds = int(int(time[1]) / 10 * 60)
+        self.clock_black = Clock(720, 100, 80, 50,self.minutes, self.seconds)
+        self.clock_white = Clock(720, 500, 80, 50,self.minutes, self.seconds)
         self.initial_position = QPointF()
         self.logger = Logger()
-        self.move_from_keyboard = MoveKeyboard(self.square_size * 9,0,100,50)
+        self.move_from_keyboard = MoveKeyboard(self.square_size * 9,300,100,50)
         self.initialize_map()
         self.updating = True
         self.history = []
         self.blinkTimer = QTimer()
         self.blinkTimer.timeout.connect(self.update_blink)
+        self.clockTimer = QTimer()
+        self.clockTimer.timeout.connect(self.monitor_time)
+        self.clockTimer.start(1000)
 
         self.log_queue = queue.Queue()
         self.log_worker = threading.Thread(target=self.process_log_updates)
@@ -40,9 +50,7 @@ class Chess(QGraphicsScene):
         self.log_worker.start()
 
     def initialize_map(self):
-        minutes, ok_pressed = QInputDialog.getInt(None, "Czas gry", "Podaj czas gry w minutach", 60, 1, 120, 1)
-        if ok_pressed:
-            self.minutes = minutes
+
         for row in range(self.h_square):
             for col in range(self.w_square):
                 if (row + col) % 2 == 0:
@@ -219,6 +227,15 @@ class Chess(QGraphicsScene):
         if event.text():
             self.move_from_keyboard.text_edit.insertPlainText(event.text())
 
+    def monitor_time(self):
+        if self.clock_black.minutes == 0 and self.clock_black.seconds == 0:
+            self.clock_black.timer.stop()
+            self.log_queue.put("Czas minął, wygrywa biały!")
+            self.clockTimer.stop()
+        if self.clock_white.minutes == 0 and self.clock_white.seconds == 0:
+            self.clock_white.timer.stop()
+            self.log_queue.put("Czas minął, wygrywa czarny!")
+            self.clockTimer.stop()
 
     def move_from_notation(self, p1, p2):
         x1, y1 = p1
@@ -496,6 +513,7 @@ class Chess(QGraphicsScene):
         old_pos = king.pos()
         moves = self.calculate_legal_moves((king.pos().y() / self.square_size, king.pos().x() / self.square_size), king, king.color)
         for move in moves:
+            buf = True
             king.setPos(move[1] * self.square_size, move[0] * self.square_size)
             if not self.check_check(self.opposite_color(king.color)):
                 if king.pos() == attacking_piece.pos():
@@ -505,15 +523,13 @@ class Chess(QGraphicsScene):
                             moves = self.calculate_legal_moves((p.pos().y() / self.square_size, p.pos().x() / self.square_size), p, p.color)
                             for m in moves:
                                 if m == (king.pos().y() / self.square_size, king.pos().x() / self.square_size):
-                                    king.setPos(old_pos)
-                                    king.update()
-                                    attacking_pieces.append(attacking_piece)
-                                    return False
+                                    buf = False
                     attacking_pieces.append(attacking_piece)
 
                 king.setPos(old_pos)
                 king.update()
-                return True
+                if buf:
+                    return True
             king.setPos(old_pos)
             king.update()
         return False
@@ -526,7 +542,31 @@ class Chess(QGraphicsScene):
                     moves = self.calculate_legal_moves((p.pos().y() / self.square_size, p.pos().x() / self.square_size), p, p.color)
                     for move in moves:
                         if move in squares:
-                            return True
+                            if not self.binding(p, move):
+                                return True
+
+
+    def binding(self, piece, move, attacking_piece=None):
+        buf = False
+        old_pos = piece.pos()
+        new_pos = QPointF(move[1] * self.square_size, move[0] * self.square_size)
+        piece.setPos(new_pos)
+        if attacking_piece is not None:
+            attacking_pieces = self.white_pieces if attacking_piece.color == "white" else self.black_pieces
+            if attacking_piece.pos() == piece.pos():
+                attacking_pieces.remove(attacking_piece)
+                buf = True
+        if self.check_check(self.opposite_color(piece.color)):
+            piece.setPos(old_pos)
+            piece.update()
+            if buf:
+                attacking_pieces.append(attacking_piece)
+            return True
+        piece.setPos(old_pos)
+        piece.update()
+        if buf:
+            attacking_pieces.append(attacking_piece)
+        return False
 
     def find_squares_between(self, king, attacking_piece):
         x = attacking_piece.pos().x() / self.square_size - king.pos().x() / self.square_size
@@ -557,7 +597,9 @@ class Chess(QGraphicsScene):
                 moves = self.calculate_legal_moves((piece.pos().y() / self.square_size, piece.pos().x() / self.square_size), piece, piece.color)
                 for move in moves:
                     if move in [(attacker.pos().y() / self.square_size, attacker.pos().x() / self.square_size)]:
-                        return True
+                        if not self.binding(piece, move, attacker):
+                            return True
+
         return False
 
 
@@ -637,9 +679,9 @@ class Chess(QGraphicsScene):
 
     def is_blocking_castling(self, king, rook):
         squares = self.find_squares_between(king, rook)
+        squares.append((king.pos().y() / self.square_size, king.pos().x() / self.square_size))
         pieces = self.white_pieces if king.color == "black" else self.black_pieces
         for square in squares:
-            print(square)
             for p in pieces:
                 if p.__class__.__name__ != "King":
                     moves = self.calculate_legal_moves((p.pos().y() / self.square_size, p.pos().x() / self.square_size), p, p.color)

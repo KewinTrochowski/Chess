@@ -10,8 +10,8 @@ class MoveKeyboard(QWidget):
         self.setWindowTitle('Prosty Edytor Tekstu')
         self.setGeometry(x, y, w, h)
         self.text_edit = QTextEdit(self)
-        self.text_edit.setPlaceholderText("Wprowadź ruch")
-
+        self.text_edit.setPlaceholderText("Wprowadź\nruch")
+        self.text_edit.setStyleSheet("color: rgb(51, 102, 33); background-color: rgb(255, 255, 204); font-size: 15px; font-weight: bold; border: 2px solid black;")
 
     def obsluga(self):
         tekst = self.text_edit.toPlainText()
@@ -37,3 +37,6 @@ class MoveKeyboard(QWidget):
         y = dic[col]
         x = 8 - int(row)
         return x, y
+
+
+
