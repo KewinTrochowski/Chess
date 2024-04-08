@@ -6,6 +6,8 @@ import threading
 import queue
 from pieces import *
 from logger import *
+from intro import GameDialog
+from endgame import gameisover
 from move_from_keyboard import MoveKeyboard
 from clock import Clock
 
@@ -24,12 +26,15 @@ class Chess(QGraphicsScene):
         self.which_turn = "white"
         self.selected_piece = None
         self.seconds = 0
-        #step 0,5 min
-        time, ok_pressed = QInputDialog.getDouble(None, "Czas gry", "Podaj czas gry w minutach", 5, 0, 120, 1)
-        if ok_pressed:
-            time = str(time).split(".")
-            self.minutes = int(time[0])
-            self.seconds = int(int(time[1]) / 10 * 60)
+
+        intro = GameDialog()
+        intro.exec()
+        time = intro.getTime()
+        self.game_mode = intro.getButton()
+
+        time = str(time).split(".")
+        self.minutes = int(time[0])
+        self.seconds = int(int(time[1]) / 10 * 60)
         self.clock_black = Clock(720, 100, 80, 50,self.minutes, self.seconds)
         self.clock_white = Clock(720, 500, 80, 50,self.minutes, self.seconds)
         self.initial_position = QPointF()
@@ -176,6 +181,7 @@ class Chess(QGraphicsScene):
             self.log_queue.put("Szach!")
             if self.check_mate(self.which_turn):
                 self.log_queue.put("Szach mat!")
+                gameisover(self.logger.text)
 
         if self.which_turn == "white":
             self.clock_white.timer.start()
@@ -188,6 +194,8 @@ class Chess(QGraphicsScene):
         self.selected_piece = None
         self.initial_position = QPointF()
         super().mouseReleaseEvent(event)
+
+
 
     def final_move(self, new_position, piece=None):
 
@@ -206,7 +214,7 @@ class Chess(QGraphicsScene):
             self.log_queue.put("Szach!")
             if self.check_mate(self.which_turn):
                 self.log_queue.put("Szach mat!")
-
+                gameisover(self.logger.text)
 
         if self.which_turn == "white":
             self.clock_white.timer.start()
@@ -232,10 +240,12 @@ class Chess(QGraphicsScene):
             self.clock_black.timer.stop()
             self.log_queue.put("Czas minął, wygrywa biały!")
             self.clockTimer.stop()
+            gameisover(self.logger.text)
         if self.clock_white.minutes == 0 and self.clock_white.seconds == 0:
             self.clock_white.timer.stop()
             self.log_queue.put("Czas minął, wygrywa czarny!")
             self.clockTimer.stop()
+            gameisover(self.logger.text)
 
     def move_from_notation(self, p1, p2):
         x1, y1 = p1
