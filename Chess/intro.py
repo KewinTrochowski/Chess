@@ -18,6 +18,8 @@ class GameDialog(QDialog):
             self.radio_buttons.append(radio_button)
             layout.addWidget(radio_button)
 
+        self.radio_buttons[0].setChecked(True)
+
         # Dodaj pole tekstowe do wprowadzania czasu
         self.time_input = QLineEdit()
         self.time_label = QLabel("Czas gry (w minutach):")
