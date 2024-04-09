@@ -1,4 +1,4 @@
-from sqlite_db import save_to_database
+from sqlite_db import save_to_database, delete_all_moves
 from xml_db import save_moves_to_xml
 import sys
 from PyQt6.QtWidgets import QApplication, QMessageBox
@@ -19,14 +19,34 @@ def exit_message_box():
     elif button_clicked == QMessageBox.StandardButton.Cancel:
         return False
 
-def gameisover(moves):
-    moves = [move for move in moves.split() if len(move) == 4]
-    db_file = "db/history.db"
-    xml_file = "db/history.xml"
-    save_moves_to_xml(moves, xml_file)
-    save_to_database(moves, db_file)
+def gameisover(history, session, flag):
+    if not flag:
+        history = [move for move in history.split()]
+        for move in history:
+            if move == "Ruch:" or move == "Szach!":
+                history.remove(move)
+        moves = []
+        timing = []
+        for i in range(len(history)):
+            if i % 2 == 0:
+                moves.append(history[i])
+            else:
+                timing.append(history[i])
+
+        dir = f"db/{session}"
+
+        db_file = f"{dir}/history.db"
+        db_file_timing = f"{dir}/timing.db"
+        xml_file = f"{dir}/history.xml"
+        delete_all_moves(db_file)
+        delete_all_moves(db_file_timing)
+        save_moves_to_xml(moves, xml_file)
+        save_to_database(moves, db_file)
+        save_to_database(timing, db_file_timing)
     if exit_message_box():
         return True
+    else:
+        sys.exit(0)
 
 
 

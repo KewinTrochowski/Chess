@@ -30,6 +30,11 @@ class Clock(QWidget):
         # Uruchamianie timera
         #self.timer.start()
 
+    def set_time(self):
+        formatted_time = f"{self.minutes:02d}:{self.seconds:02d}"
+        self.text_edit.setText(formatted_time)
+
+
     def update_time(self):
         """Aktualizuje wyświetlany czas."""
         if self.seconds == 0:

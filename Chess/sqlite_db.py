@@ -35,8 +35,9 @@ def insert_moves(conn, moves):
         print(e)
 
 
-def delete_all_moves(conn):
+def delete_all_moves(db_file):
     """Usuwa wszystkie ruchy z tabeli 'moves'"""
+    conn = create_connection(db_file)
     try:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM moves")
@@ -60,7 +61,6 @@ def read_from_database(db_file):
 def save_to_database(moves, db_file):
     conn = create_connection(db_file)
     if conn is not None:
-        delete_all_moves(conn)
         create_table(conn)
         insert_moves(conn, moves)
         conn.close()
@@ -69,5 +69,8 @@ def save_to_database(moves, db_file):
 
 
 if __name__ == "__main__":
-    database = "db/history.db"
-    read_from_database(database)
+    dir = f"db/2024-04-09 13.09.31"
+    database = f"{dir}/history.db"
+    print(read_from_database(database))
+    database = f"{dir}/timing.db"
+    print(read_from_database(database))

@@ -24,3 +24,7 @@ class Logger(QMainWindow):
     def update_text(self, text):
         self.text = self.text + text + "\n"
         self.label.setText(self.text)
+
+    def clear_text(self):
+        self.text = ""
+        self.label.setText(self.text)

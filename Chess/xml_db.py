@@ -30,7 +30,8 @@ def display_xml_content(root):
         print("  Dziecko:", child.tag, "tekst:", child.text)
 
 if __name__ == '__main__':
-    xml_file = "db/history.xml"  # Nazwa pliku XML
+    dir = f"db/2024-04-09 13.09.31"
+    xml_file = f"{dir}/history.xml"  # Nazwa pliku XML
 
     root = read_xml_file(xml_file)
     if root:

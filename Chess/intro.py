@@ -1,5 +1,6 @@
 from PyQt6.QtWidgets import QApplication, QInputDialog, QDialog, QRadioButton, QVBoxLayout, QPushButton, QLineEdit, QLabel
-from PyQt6.QtGui import QDoubleValidator
+from PyQt6.QtGui import QDoubleValidator, QIntValidator
+import sys
 
 class GameDialog(QDialog):
     def __init__(self):
@@ -33,13 +34,29 @@ class GameDialog(QDialog):
         validator.setDecimals(2)  # Ustaw ilość miejsc po przecinku na 2
         self.time_input.setValidator(validator)
 
+        # Dodaj pole tekstowe dla adresu IP
+        self.ip_input = QLineEdit()
+        self.ip_label = QLabel("Adres IP:")
+        layout.addWidget(self.ip_label)
+        layout.addWidget(self.ip_input)
+
+        # Dodaj pole tekstowe dla portu
+        self.port_input = QLineEdit()
+        self.port_label = QLabel("Port:")
+        layout.addWidget(self.port_label)
+        layout.addWidget(self.port_input)
+
+        # Ustaw validator dla pola tekstowego portu, aby akceptował tylko liczby całkowite z zakresu 1-65535
+        port_validator = QIntValidator(1, 65535)
+        self.port_input.setValidator(port_validator)
+
         # Dodaj przyciski OK i Anuluj
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(self.accept)
         layout.addWidget(ok_button)
 
         cancel_button = QPushButton("Anuluj")
-        cancel_button.clicked.connect(self.reject)
+        cancel_button.clicked.connect(sys.exit)
         layout.addWidget(cancel_button)
 
         self.setLayout(layout)
@@ -55,6 +72,18 @@ class GameDialog(QDialog):
         time_text = time_text.replace(",", ".")
         if time_text:
             return float(time_text)
+        return None
+
+    def getIP(self):
+        ip_text = self.ip_input.text()
+        if ip_text:
+            return ip_text
+        return None
+
+    def getPort(self):
+        port_text = self.port_input.text()
+        if port_text:
+            return int(port_text)
         return None
 
 '''app = QApplication([])

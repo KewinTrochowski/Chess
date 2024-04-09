@@ -1,5 +1,5 @@
 import sys
-import time
+import time, os
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsTextItem, QInputDialog
 from PyQt6.QtCore import QTimer, QPointF
 from PyQt6.QtGui import QFont
@@ -13,6 +13,7 @@ from move_from_keyboard import MoveKeyboard
 from clock import Clock
 from json_settings import save_to_json
 from sqlite_db import read_from_database
+from datetime import datetime
 
 class Chess(QGraphicsScene):
     def __init__(self):
@@ -28,18 +29,24 @@ class Chess(QGraphicsScene):
         self.which_turn = "white"
         self.selected_piece = None
         self.seconds = 0
+        self.session = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
+
+        os.mkdir(f"db/{self.session}")
+
 
         intro = GameDialog()
         intro.exec()
         time = intro.getTime()
         self.game_mode = intro.getButton()
-
+        self.ip = intro.getIP()
+        self.port = intro.getPort()
         time = str(time).split(".")
         self.minutes = int(time[0])
         self.seconds = int(int(time[1]) / 10 * 60)
 
-        self.settings = {"minutes": self.minutes, "seconds": self.seconds, "game_mode": self.game_mode}
-        save_to_json(self.settings)
+        self.settings = {"minutes": self.minutes, "seconds": self.seconds, "game_mode": self.game_mode
+                         , "ip": self.ip, "port": self.port, "session": self.session}
+        save_to_json(self.settings, self.session)
 
         self.clock_black = Clock(720, 100, 80, 50,self.minutes, self.seconds)
         self.clock_white = Clock(720, 500, 80, 50,self.minutes, self.seconds)
@@ -62,8 +69,10 @@ class Chess(QGraphicsScene):
         self.log_worker.start()
 
         self.history_moves = []
+        self.history_timing = []
         self.auto_play_time = 0
         self.auto_play_wait = 1000000
+        self.history_is_playing = False
 
     def initialize_map(self):
 
@@ -195,15 +204,16 @@ class Chess(QGraphicsScene):
                 self.log_queue.put("Szach mat!")
                 self.clock_white.timer.stop()
                 self.clock_black.timer.stop()
-                if gameisover(self.logger.text):
+                if gameisover(self.logger.text, self.session, self.history_is_playing):
                     self.reset_game()
 
-        if self.which_turn == "white":
-            self.clock_white.timer.start()
-            self.clock_black.timer.stop()
-        else:
-            self.clock_black.timer.start()
-            self.clock_white.timer.stop()
+        if not self.history_is_playing:
+            if self.which_turn == "white":
+                self.clock_white.timer.start()
+                self.clock_black.timer.stop()
+            else:
+                self.clock_black.timer.start()
+                self.clock_white.timer.stop()
 
         self.updating = True
         self.selected_piece = None
@@ -229,15 +239,16 @@ class Chess(QGraphicsScene):
             self.log_queue.put("Szach!")
             if self.check_mate(self.which_turn):
                 self.log_queue.put("Szach mat!")
-                if gameisover(self.logger.text):
+                if gameisover(self.logger.text, self.session, self.history_is_playing):
                     self.reset_game()
 
-        if self.which_turn == "white":
-            self.clock_white.timer.start()
-            self.clock_black.timer.stop()
-        else:
-            self.clock_black.timer.start()
-            self.clock_white.timer.stop()
+        if not self.history_is_playing:
+            if self.which_turn == "white":
+                self.clock_white.timer.start()
+                self.clock_black.timer.stop()
+            else:
+                self.clock_black.timer.start()
+                self.clock_white.timer.stop()
 
         self.updating = True
         self.selected_piece = None
@@ -252,8 +263,15 @@ class Chess(QGraphicsScene):
         self.clock_black.minutes = self.minutes
         self.clock_white.seconds = self.seconds
         self.clock_black.seconds = self.seconds
-        self.history_moves = read_from_database("db/history.db")
+        self.clock_black.set_time()
+        self.clock_white.set_time()
+        self.clock_black.timer.stop()
+        self.clock_white.timer.stop()
+        self.logger.clear_text()
+        self.history_moves = read_from_database(f"db/{self.session}/history.db")
+        self.history_timing = read_from_database(f"db/{self.session}/timing.db")
         self.auto_play_time = time.time()
+        self.history_is_playing = True
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Up:
@@ -262,7 +280,7 @@ class Chess(QGraphicsScene):
                 self.move_from_notation(p1, p2)
         if event.key() == Qt.Key.Key_Right:
             if self.history_moves:
-                self.play_history(self.history_moves.pop(0))
+                self.play_history(self.history_moves.pop(0), self.history_timing.pop(0))
         if event.key() == Qt.Key.Key_Space:
             self.auto_play_wait = 2 if self.auto_play_wait > 2 else 1000000
         if event.text():
@@ -271,7 +289,7 @@ class Chess(QGraphicsScene):
     def monitor_time(self):
         if self.history_moves:
             if time.time() - self.auto_play_time >= self.auto_play_wait:
-                self.play_history(self.history_moves.pop(0))
+                self.play_history(self.history_moves.pop(0), self.history_timing.pop(0))
                 self.auto_play_time = time.time()
 
 
@@ -279,20 +297,29 @@ class Chess(QGraphicsScene):
             self.clock_black.timer.stop()
             self.log_queue.put("Czas minął, wygrywa biały!")
             self.clockTimer.stop()
-            if gameisover(self.logger.text):
-                sys.exit()
+            if gameisover(self.logger.text, self.session, self.history_is_playing):
+                self.reset_game()
         if self.clock_white.minutes == 0 and self.clock_white.seconds == 0:
             self.clock_white.timer.stop()
             self.log_queue.put("Czas minął, wygrywa czarny!")
             self.clockTimer.stop()
-            if gameisover(self.logger.text):
-                sys.exit()
+            if gameisover(self.logger.text, self.session, self.history_is_playing):
+                self.reset_game()
 
-    def play_history(self,move):
+    def play_history(self,move,time):
         move = move[1]
         p1 = self.from_chess_notation(move[0:2])
         p2 = self.from_chess_notation(move[2:4])
         self.move_from_notation(p1, p2)
+        if self.which_turn == "black":
+            self.clock_white.minutes = int(time[1][0])
+            self.clock_white.seconds = int(time[1][2:])
+            self.clock_white.set_time()
+        else:
+            self.clock_black.minutes = int(time[1][0])
+            self.clock_black.seconds = int(time[1][2:])
+            self.clock_black.set_time()
+
 
     def move_from_notation(self, p1, p2):
         x1, y1 = p1
@@ -828,7 +855,8 @@ class Chess(QGraphicsScene):
             iniy = self.initial_position.y() / self.square_size
             x = self.selected_piece.pos().x() / self.square_size
             y = self.selected_piece.pos().y() / self.square_size
-            text = f'{self.to_chess_notation(iniy, inix)}{self.to_chess_notation(y, x)}'
+            time = f"{self.clock_white.minutes}:{self.clock_white.seconds}" if self.which_turn == "black" else f"{self.clock_black.minutes}:{self.clock_black.seconds}"
+            text = f'{self.to_chess_notation(iniy, inix)}{self.to_chess_notation(y, x)} {time}'
             self.log_queue.put(f"Ruch: {text}")
 
     def process_log_updates(self):
