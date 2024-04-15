@@ -37,12 +37,14 @@ class GameDialog(QDialog):
         # Dodaj pole tekstowe dla adresu IP
         self.ip_input = QLineEdit()
         self.ip_label = QLabel("Adres IP:")
+        self.ip_input.setText("127.0.0.1")
         layout.addWidget(self.ip_label)
         layout.addWidget(self.ip_input)
 
         # Dodaj pole tekstowe dla portu
         self.port_input = QLineEdit()
         self.port_label = QLabel("Port:")
+        self.port_input.setText("55555")
         layout.addWidget(self.port_label)
         layout.addWidget(self.port_input)
 

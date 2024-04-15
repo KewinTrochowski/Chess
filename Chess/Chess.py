@@ -14,6 +14,8 @@ from clock import Clock
 from json_settings import save_to_json
 from sqlite_db import read_from_database
 from datetime import datetime
+from tcp_client import create_tcp_client, send_message_to_tcp_server
+
 
 class Chess(QGraphicsScene):
     def __init__(self):
@@ -48,6 +50,15 @@ class Chess(QGraphicsScene):
                          , "ip": self.ip, "port": self.port, "session": self.session}
         save_to_json(self.settings, self.session)
 
+        if self.game_mode == 1:
+            self.tcp_client = create_tcp_client(self.ip, self.port)
+            self.tcp_client_thread = threading.Thread(target=self.receive_tcp_messages, args=(self.tcp_client,))
+            self.tcp_client_thread.start()
+        self.tcp_ip_move = None
+        self.tcpTimer = QTimer()
+        self.tcpTimer.timeout.connect(self.tcp_update)
+        self.tcpTimer.start(100)
+
         self.clock_black = Clock(720, 100, 80, 50,self.minutes, self.seconds)
         self.clock_white = Clock(720, 500, 80, 50,self.minutes, self.seconds)
         self.initial_position = QPointF()
@@ -73,6 +84,7 @@ class Chess(QGraphicsScene):
         self.auto_play_time = 0
         self.auto_play_wait = 1000000
         self.history_is_playing = False
+
 
     def initialize_map(self):
 
@@ -249,7 +261,6 @@ class Chess(QGraphicsScene):
             else:
                 self.clock_black.timer.start()
                 self.clock_white.timer.stop()
-
         self.updating = True
         self.selected_piece = None
         self.initial_position = QPointF()
@@ -286,12 +297,16 @@ class Chess(QGraphicsScene):
         if event.text():
             self.move_from_keyboard.text_edit.insertPlainText(event.text())
 
+    def tcp_update(self):
+        if self.tcp_ip_move:
+            self.move_from_notation(self.from_chess_notation(self.tcp_ip_move[0:2]), self.from_chess_notation(self.tcp_ip_move[2:4]))
+            self.tcp_ip_move = None
+
     def monitor_time(self):
         if self.history_moves:
             if time.time() - self.auto_play_time >= self.auto_play_wait:
                 self.play_history(self.history_moves.pop(0), self.history_timing.pop(0))
                 self.auto_play_time = time.time()
-
 
         if self.clock_black.minutes == 0 and self.clock_black.seconds == 0:
             self.clock_black.timer.stop()
@@ -305,6 +320,28 @@ class Chess(QGraphicsScene):
             self.clockTimer.stop()
             if gameisover(self.logger.text, self.session, self.history_is_playing):
                 self.reset_game()
+
+    def receive_tcp_messages(self, client_socket):
+        try:
+            while True:
+                message = client_socket.recv(1024)  # Odbierz wiadomość (bufor 1024 bajty)
+                if message:
+                    move = message.decode()
+                    print(f"Received message: {move}")
+                    self.tcp_ip_move = move
+
+                else:
+                    print("Connection closed by the server.")
+                    break
+        except ConnectionResetError:
+            print("Server closed the connection")
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            client_socket.close()
+
+
+
 
     def play_history(self,move,time):
         move = move[1]
@@ -332,6 +369,9 @@ class Chess(QGraphicsScene):
 
         if new_position is not None:
             self.final_move(QPointF(y2 * self.square_size, x2 * self.square_size), self.selected_piece)
+            self.update()
+
+
 
     def find_piece(self, x, y):
         for piece in self.white_pieces + self.black_pieces:
@@ -849,7 +889,7 @@ class Chess(QGraphicsScene):
                 square.is_legal = False
                 square.update()
 
-    def update_logger(self):
+    def update_logger(self, buf=True):
         if self.updating:
             inix = self.initial_position.x() / self.square_size
             iniy = self.initial_position.y() / self.square_size
@@ -858,6 +898,8 @@ class Chess(QGraphicsScene):
             time = f"{self.clock_white.minutes}:{self.clock_white.seconds}" if self.which_turn == "black" else f"{self.clock_black.minutes}:{self.clock_black.seconds}"
             text = f'{self.to_chess_notation(iniy, inix)}{self.to_chess_notation(y, x)} {time}'
             self.log_queue.put(f"Ruch: {text}")
+            if self.game_mode == 1 and buf:
+                send_message_to_tcp_server(self.tcp_client, text[0:4])
 
     def process_log_updates(self):
         while True:
