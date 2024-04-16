@@ -19,10 +19,12 @@ class Clock(QWidget):
         self.text_edit.setReadOnly(True)
         self.text_edit.setStyleSheet("color: rgb(51, 102, 33); background-color: rgb(255, 255, 204); font-size: 24px; font-weight: bold; border: 2px solid black;")
 
-        # Ustawienie timera
-        self.timer = QTimer(self)
-        self.timer.setInterval(1000)  # Odświeżanie co sekundę
+        # Ustawienie timera w tle jako wątek
+        self.timer = QTimer()
+        self.timer.setInterval(1000)
         self.timer.timeout.connect(self.update_time)
+
+
 
         formatted_time = f"{self.minutes:02d}:{self.seconds:02d}"
         self.text_edit.setText(formatted_time)

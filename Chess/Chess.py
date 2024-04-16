@@ -15,7 +15,9 @@ from json_settings import save_to_json
 from sqlite_db import read_from_database
 from datetime import datetime
 from tcp_client import create_tcp_client, send_message_to_tcp_server
-
+from tcp_server import Server
+import subprocess
+from chat import ChatWindow
 
 class Chess(QGraphicsScene):
     def __init__(self):
@@ -52,6 +54,14 @@ class Chess(QGraphicsScene):
 
         if self.game_mode == 1:
             self.tcp_client = create_tcp_client(self.ip, self.port)
+            if self.tcp_client is None:
+                self.tcp_server = Server(self.ip, self.port)
+                #self.tcp_server_thread = threading.Thread(target=self.tcp_server.start_server)
+                #self.tcp_server_thread.start()
+                command = f'start cmd.exe /k python tcp_server.py {self.ip} {self.port}'
+                subprocess.Popen(command, shell=True)
+
+                self.tcp_client = create_tcp_client(self.ip, self.port)
             self.tcp_client_thread = threading.Thread(target=self.receive_tcp_messages, args=(self.tcp_client,))
             self.tcp_client_thread.start()
         self.tcp_ip_move = None
@@ -64,6 +74,12 @@ class Chess(QGraphicsScene):
         self.initial_position = QPointF()
         self.logger = Logger()
         self.move_from_keyboard = MoveKeyboard(self.square_size * 9,300,100,50)
+
+        self.chat_magazine = ""
+        self.chat = ChatWindow()
+        self.chat_thread = threading.Thread(target=self.process_chat_updates)
+        self.chat_thread.start()
+
         self.initialize_map()
         self.updating = True
         self.history = []
@@ -71,6 +87,7 @@ class Chess(QGraphicsScene):
         self.blinkTimer = QTimer()
         self.blinkTimer.timeout.connect(self.update_blink)
         self.clockTimer = QTimer()
+        self.clockTime_thread = threading.Thread(target=self.monitor_time)
         self.clockTimer.timeout.connect(self.monitor_time)
         self.clockTimer.start(1000)
 
@@ -84,6 +101,8 @@ class Chess(QGraphicsScene):
         self.auto_play_time = 0
         self.auto_play_wait = 1000000
         self.history_is_playing = False
+
+
 
 
     def initialize_map(self):
@@ -137,6 +156,7 @@ class Chess(QGraphicsScene):
             self.addItem(piece)
 
         self.logger.show()
+        self.chat.show()
         self.addWidget(self.move_from_keyboard)
         self.addWidget(self.clock_black)
         self.addWidget(self.clock_white)
@@ -328,7 +348,12 @@ class Chess(QGraphicsScene):
                 if message:
                     move = message.decode()
                     print(f"Received message: {move}")
-                    self.tcp_ip_move = move
+                    if move[:5] == "Chat:":
+                        print("XXXXXXXX")
+                        self.chat.text = move
+                        self.chat.chat_label.setText(self.chat.text)
+                    else:
+                        self.tcp_ip_move = move
 
                 else:
                     print("Connection closed by the server.")
@@ -906,6 +931,15 @@ class Chess(QGraphicsScene):
             text = self.log_queue.get()
             self.logger.update_text(text)
             self.log_queue.task_done()
+
+    def process_chat_updates(self):
+        while True:
+            if self.chat.text != self.chat_magazine:
+                self.tcp_client.send(self.chat.text.encode())
+                self.chat_magazine = self.chat.text
+            time.sleep(1)
+
+
 
     def pawn_promotion(self):
         if self.selected_piece.color == "white":
