@@ -75,10 +75,11 @@ class Chess(QGraphicsScene):
         self.logger = Logger()
         self.move_from_keyboard = MoveKeyboard(self.square_size * 9,300,100,50)
 
-        self.chat_magazine = ""
-        self.chat = ChatWindow()
-        self.chat_thread = threading.Thread(target=self.process_chat_updates)
-        self.chat_thread.start()
+        if self.game_mode == 1:
+            self.chat_magazine = ""
+            self.chat = ChatWindow()
+            self.chat_thread = threading.Thread(target=self.process_chat_updates)
+            self.chat_thread.start()
 
         self.initialize_map()
         self.updating = True
@@ -156,7 +157,8 @@ class Chess(QGraphicsScene):
             self.addItem(piece)
 
         self.logger.show()
-        self.chat.show()
+        if self.game_mode == 1:
+            self.chat.show()
         self.addWidget(self.move_from_keyboard)
         self.addWidget(self.clock_black)
         self.addWidget(self.clock_white)
