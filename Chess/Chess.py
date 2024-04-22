@@ -1,5 +1,5 @@
 import sys
-import time, os
+import time, os, random
 from PyQt6.QtWidgets import QApplication, QGraphicsView, QGraphicsScene, QGraphicsTextItem, QInputDialog
 from PyQt6.QtCore import QTimer, QPointF
 from PyQt6.QtGui import QFont
@@ -452,8 +452,22 @@ class Chess(QGraphicsScene):
         cord_x, cord_y = cord_x / self.square_size, cord_y / self.square_size
         legal_moves = self.calculate_legal_moves((cord_y, cord_x), self.selected_piece, self.which_turn)
 
+        """for move in legal_moves:
+            print(self.to_chess_notation(cord_y,cord_x), self.to_chess_notation(move[0], move[1]))"""
+        self.all_legal_moves_for_ai()
+
         for move in legal_moves:
             self.highlight_square(move[1], move[0])  # x, y -> y, x because of the way the board is created
+
+    def all_legal_moves_for_ai(self):
+        legal_moves = {}
+        pieces = self.white_pieces if self.which_turn == "white" else self.black_pieces
+        for piece in pieces:
+                posit = self.to_chess_notation(piece.pos().y() / self.square_size, piece.pos().x() / self.square_size)
+                mvs = self.calculate_legal_moves((piece.pos().y() / self.square_size, piece.pos().x() / self.square_size), piece, piece.color)
+                mvs = [self.to_chess_notation(mv[0], mv[1]) for mv in mvs]
+                legal_moves[posit] = mvs
+        return legal_moves
 
     def highlight_square(self, x, y):
         x = int(x)
@@ -928,6 +942,16 @@ class Chess(QGraphicsScene):
             if self.game_mode == 1 and buf:
                 send_message_to_tcp_server(self.tcp_client, text[0:4])
 
+            if self.game_mode == 2:
+                self.make_ai_move()
+    def make_ai_move(self):
+        if self.which_turn == "black":
+            ai_moves = self.all_legal_moves_for_ai()
+            available_pieces = {key: val for key, val in ai_moves.items() if val}
+            selected_piece = random.choice(list(available_pieces.keys()))
+            selected_move = random.choice(available_pieces[selected_piece])
+            print(f"Wybrany pionek: {selected_piece}, ruch: {selected_move}")
+            self.move_from_notation(self.from_chess_notation(selected_piece), self.from_chess_notation(selected_move))
     def process_log_updates(self):
         while True:
             text = self.log_queue.get()
