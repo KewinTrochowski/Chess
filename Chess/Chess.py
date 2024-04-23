@@ -103,6 +103,12 @@ class Chess(QGraphicsScene):
         self.auto_play_wait = 1000000
         self.history_is_playing = False
 
+        if self.game_mode == 2:
+            self.color = QInputDialog.getItem(None, "Choose color", "Choose color", ["white", "black"], 0, False)
+            self.ai_color = self.opposite_color(self.color[0])
+            if self.ai_color == "white":
+                self.make_ai_move()
+
 
 
 
@@ -451,10 +457,6 @@ class Chess(QGraphicsScene):
         cord_x, cord_y = self.calculate_position(x + 1, y + 1)
         cord_x, cord_y = cord_x / self.square_size, cord_y / self.square_size
         legal_moves = self.calculate_legal_moves((cord_y, cord_x), self.selected_piece, self.which_turn)
-
-        """for move in legal_moves:
-            print(self.to_chess_notation(cord_y,cord_x), self.to_chess_notation(move[0], move[1]))"""
-        self.all_legal_moves_for_ai()
 
         for move in legal_moves:
             self.highlight_square(move[1], move[0])  # x, y -> y, x because of the way the board is created
@@ -945,13 +947,25 @@ class Chess(QGraphicsScene):
             if self.game_mode == 2:
                 self.make_ai_move()
     def make_ai_move(self):
-        if self.which_turn == "black":
+        try_take = False
+        ai_color = self.ai_color
+        player_color = self.opposite_color(ai_color)
+        if self.which_turn == ai_color:
             ai_moves = self.all_legal_moves_for_ai()
             available_pieces = {key: val for key, val in ai_moves.items() if val}
-            selected_piece = random.choice(list(available_pieces.keys()))
-            selected_move = random.choice(available_pieces[selected_piece])
-            print(f"Wybrany pionek: {selected_piece}, ruch: {selected_move}")
-            self.move_from_notation(self.from_chess_notation(selected_piece), self.from_chess_notation(selected_move))
+            for piece in available_pieces.keys():
+                for move in available_pieces[piece]:
+                    for p in self.black_pieces + self.white_pieces:
+                        if self.from_chess_notation(move) == (p.pos().y() / self.square_size, p.pos().x() / self.square_size):
+                            if p.color == player_color:
+                                self.move_from_notation(self.from_chess_notation(piece), self.from_chess_notation(move))
+                                try_take = True
+            if try_take == False or (try_take == True and self.which_turn == ai_color):
+                selected_piece = random.choice(list(available_pieces.keys()))
+                selected_move = random.choice(available_pieces[selected_piece])
+                self.move_from_notation(self.from_chess_notation(selected_piece), self.from_chess_notation(selected_move))
+            if self.which_turn == ai_color:
+                self.make_ai_move()
     def process_log_updates(self):
         while True:
             text = self.log_queue.get()
